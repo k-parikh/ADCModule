@@ -1,0 +1,93 @@
+#include <msp430.h> 
+void LCD_command(unsigned char);
+void LCD_write(unsigned char);
+void LCD_init(void);
+unsigned int adc_raw;
+
+/**
+ * main.c
+ */
+int main(void)
+{
+	WDTCTL = WDTPW | WDTHOLD;	// stop watchdog timer
+	PM5CTL0 &= ~LOCKLPM5;
+	P3DIR |= 0xFF;
+	P3OUT &= ~0xFF;
+	P8DIR |= 0x0E;
+	P8OUT &= ~0x0E;
+	P6DIR |= 0x07;
+	P4SEL1 |= BIT1;
+	P4SEL0 |= BIT1;
+	ADC12CTL0 = ADC12SHT0_6 | ADC12ON;
+	ADC12CTL1 = ADC12SHP;
+	ADC12CTL2 = ADC12RES_2;
+	ADC12MCTL0 = ADC12INCH_9;
+	ADC12IER0 |= ADC12IE0;
+	__enable_interrupt();
+	while(1){
+	    ADC12CTL0 |= ADC12ENC | ADC12SC;
+	    LCD_init();
+	    unsigned long voltage = ((((unsigned long)adc_raw) * 3.300) / 4095) * 1000;
+	    LCD_write('0' + (voltage/1000));
+	    LCD_write('.');
+	    LCD_write('0' + (voltage/100) % 10);
+	    LCD_write('0' + (voltage/10) % 10);
+	    LCD_write('0' + (voltage/1) % 10);
+	    if(voltage < 1000){
+	        P6OUT = ~0x00;
+	    }
+	    if((voltage >= 1000) && (voltage < 2000)){
+	        P6OUT = ~0x04;
+	    }
+	    if((voltage >= 2000) && (voltage < 3000)){
+	        P6OUT = ~0x02;
+	    }
+	    if(voltage >= 3000){
+	        P6OUT = ~0x01;
+	    }
+	    __delay_cycles(250000);
+	}
+	return 0;
+}
+
+#pragma vector = ADC12_B_VECTOR
+__interrupt void ADC12_ISR(void){
+    if((ADC12IFGR0 & BIT0)!=0){
+        adc_raw=ADC12MEM0;
+    }
+}
+
+void LCD_command(unsigned char in){
+    P3OUT = in;
+    P8OUT &= ~BIT3;
+    P8OUT &= ~BIT2;
+    P8OUT |= BIT1;
+    __delay_cycles(200);
+    P8OUT &= ~BIT1;
+}
+
+void LCD_write(unsigned char in){
+    P3OUT = in;
+    P8OUT |= BIT3;
+    P8OUT &= ~BIT2;
+    P8OUT |= BIT1;
+    __delay_cycles(200);
+    P8OUT &= ~BIT1;
+}
+
+void LCD_init(){
+    P8OUT &= ~BIT1;
+    __delay_cycles(15000);
+    LCD_command(0x30);
+    __delay_cycles(300);
+    LCD_command(0x30);
+    __delay_cycles(300);
+    LCD_command(0x30);
+    __delay_cycles(300);
+    LCD_command(0x38);
+    LCD_command(0x10);
+    LCD_command(0x0F);
+    LCD_command(0x06);
+    LCD_command(0x01);
+    __delay_cycles(3000);
+}
